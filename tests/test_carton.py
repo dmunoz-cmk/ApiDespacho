@@ -1,8 +1,9 @@
 import unittest
 
 from app.carton import KG_EXTERNO, simular_lineas
-from app.cotizar import PedidoInvalido, resolver_destino, via_de_factura
+from app.cotizar import PedidoInvalido, cotizar_factura, resolver_destino, via_de_factura
 from app.nombres import es_retail, js_round
+from app.tarifas import armar_correcciones, armar_tarifas, cotizar_tramo
 
 
 def linea(**partial):
@@ -73,6 +74,50 @@ class ViaTest(unittest.TestCase):
         self.assertEqual(via_de_factura("FARMA", "Arica y Parinacota"), "Terrestre")
         self.assertEqual(via_de_factura("REF", "Biobío"), "Terrestre")
         self.assertEqual(via_de_factura("MEZZ", "Metropolitana"), "Terrestre")
+
+    def test_isla_de_pascua_siempre_aereo(self):
+        self.assertEqual(via_de_factura("FARMA", "Valparaíso", "ISLA DE PASCUA"), "Aerea")
+        self.assertEqual(via_de_factura("MEZZ", "Valparaíso", "Isla De Pascua"), "Aerea")
+        self.assertEqual(via_de_factura("FARMA", "Valparaíso", "Valparaíso"), "Terrestre")
+
+
+def tramo(courier, via, comuna, precio):
+    return {"Courier": courier, "Via": via, "Comuna": comuna, "Region": "R",
+            "Kg_Desde": 0, "Kg_Hasta": 10, "Tipo_Precio": "fijo", "Precio_Neto": precio}
+
+
+class TarifaTest(unittest.TestCase):
+    def test_comuna_corregida(self):
+        tarifas = armar_tarifas([tramo("Newtrans", "Terrestre", "Tiltil", 5000)])
+        correcciones = armar_correcciones([{"Localidad": "TIL TIL", "Comuna_Corregida": "Tiltil"}])
+        self.assertEqual(cotizar_tramo(tarifas, "TIL TIL", "Newtrans", "Terrestre", 1.0), (1.0, None))
+        self.assertEqual(
+            cotizar_tramo(tarifas, "TIL TIL", "Newtrans", "Terrestre", 1.0, correcciones), (1.0, 5000)
+        )
+
+    def test_respaldo_en_el_otro_courier(self):
+        tarifas = armar_tarifas([tramo("Transfarma", "Terrestre", "Chillan Viejo", 4000)])
+        self.assertEqual(
+            cotizar_factura(tarifas, {}, "CHILLAN VIEJO", "Newtrans", "Terrestre", 1.0),
+            (1.0, 4000, "Transfarma", True),
+        )
+
+    def test_sin_respaldo_si_el_propio_tiene_tramo(self):
+        tarifas = armar_tarifas([
+            tramo("Newtrans", "Terrestre", "Talca", 3000),
+            tramo("Transfarma", "Terrestre", "Talca", 2000),
+        ])
+        self.assertEqual(
+            cotizar_factura(tarifas, {}, "Talca", "Newtrans", "Terrestre", 1.0),
+            (1.0, 3000, "Newtrans", False),
+        )
+
+    def test_sin_tramo_en_ninguno(self):
+        tarifas = armar_tarifas([tramo("Transfarma", "Terrestre", "Talca", 2000)])
+        self.assertEqual(
+            cotizar_factura(tarifas, {}, "Mejillones", "Transfarma", "Aerea", 1.0),
+            (1.0, None, "Transfarma", False),
+        )
 
 
 def ficha(**partial):

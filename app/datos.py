@@ -77,6 +77,17 @@ def leer_matriz():
         )
 
 
+def leer_correcciones():
+    with conectar_ccl() as con:
+        return _filas(
+            con,
+            """
+            SELECT [Localidad], [Comuna_Corregida]
+            FROM [TRP].[Matriz_Comuna_Correccion]
+            """,
+        )
+
+
 def _holding(tabla):
     base = entorno("HOLDING_DATABASE", "dw_holding") or "dw_holding"
     if not base.replace("_", "").isalnum():

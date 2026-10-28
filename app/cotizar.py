@@ -1,10 +1,11 @@
 """Arma el costo de despacho de una orden para SAP."""
 from app.carton import REFRIGERADAS, simular_lineas, sku_key
-from app.datos import ErrorDatos, leer_cliente, leer_matriz, leer_productos
-from app.nombres import courier_nt, es_retail, norm_nombre, region_extrema
-from app.tarifas import cargar_tarifas, cotizar_tramo, region_de
+from app.datos import ErrorDatos, leer_cliente, leer_correcciones, leer_matriz, leer_productos
+from app.nombres import courier_nt, es_isla_de_pascua, es_retail, norm_nombre, region_extrema
+from app.tarifas import cargar_correcciones, cargar_tarifas, cotizar_tramo, region_de
 
 CRITERIO = "retail-2026-10"
+RESPALDO = {"Newtrans": "Transfarma", "Transfarma": "Newtrans"}
 
 
 class PedidoInvalido(Exception):
@@ -13,10 +14,25 @@ class PedidoInvalido(Exception):
         self.extra = extra or {}
 
 
-def via_de_factura(factura_id, region):
+def via_de_factura(factura_id, region, comuna=""):
+    if es_isla_de_pascua(comuna):
+        return "Aerea"
     if factura_id in REFRIGERADAS and region_extrema(region):
         return "Aerea"
     return "Terrestre"
+
+
+def cotizar_factura(tarifas, correcciones, comuna, courier, via, kg):
+    """Usa el tarifario del courier del cliente; si no tiene tramo, el del otro courier."""
+    kg_ok, precio = cotizar_tramo(tarifas, comuna, courier, via, kg, correcciones)
+    if precio is not None:
+        return kg_ok, precio, courier, False
+    respaldo = RESPALDO.get(courier)
+    if respaldo:
+        kg_r, precio_r = cotizar_tramo(tarifas, comuna, respaldo, via, kg, correcciones)
+        if precio_r is not None:
+            return kg_r, precio_r, respaldo, True
+    return kg_ok, None, courier, False
 
 
 def resolver_destino(cliente):
@@ -113,31 +129,42 @@ def cotizar(pedido):
     avisos.extend(armado["avisos"])
     try:
         tarifas = cargar_tarifas(leer_matriz)
+        correcciones = cargar_correcciones(leer_correcciones)
     except ErrorDatos:
         raise
     if not str(region or "").strip():
-        region = region_de(tarifas, comuna)
+        region = region_de(tarifas, comuna, correcciones)
 
     facturas = []
     total = 0
     completas = 0
     for fac in armado["facturas"]:
-        via = via_de_factura(fac["id"], region)
+        via = via_de_factura(fac["id"], region, comuna)
         kg, precio = (None, None)
+        usado, respaldo = courier, False
         motivo = None
         if not comuna or not courier:
             motivo = "Falta la comuna o el courier de la ruta del cliente para buscar el tramo."
         elif not (fac["kg_exacto"] > 0):
             motivo = "Sin kilo volumétrico para buscar el tramo."
         else:
-            kg, precio = cotizar_tramo(tarifas, comuna, courier, via, fac["kg_exacto"])
+            kg, precio, usado, respaldo = cotizar_factura(
+                tarifas, correcciones, comuna, courier, via, fac["kg_exacto"]
+            )
             if precio is None:
-                motivo = "No hay tramo para esta comuna, courier y vía."
+                motivo = "No hay tramo para esta comuna y vía en Newtrans ni en Transfarma."
+            elif respaldo:
+                avisos.append(
+                    f"{fac['nombre']}: {courier} no tiene tramo {via} para {comuna}. "
+                    f"Se cotizó con el tarifario de {usado} como respaldo."
+                )
         if precio is not None:
             total += precio
             completas += 1
         facturas.append({
             "factura": fac["nombre"],
+            "courier": usado,
+            "respaldo": respaldo,
             "via": via,
             "bultos": fac["bultos"],
             "kilos": kg,

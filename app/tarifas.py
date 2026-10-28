@@ -4,11 +4,13 @@ import math
 from app.nombres import js_round, norm_nombre, redondear_kg
 
 _CACHE = None
+_CORRECCIONES = None
 
 
 def limpiar_cache():
-    global _CACHE
+    global _CACHE, _CORRECCIONES
     _CACHE = None
+    _CORRECCIONES = None
 
 
 def _bucket(courier, via):
@@ -97,21 +99,53 @@ def cargar_tarifas(leer_filas):
     return _CACHE
 
 
-def region_de(tarifas, comuna):
-    clave = norm_nombre(comuna)
-    for mapa in tarifas.values():
-        item = mapa.get(clave)
+def armar_correcciones(filas):
+    mapa = {}
+    for fila in filas or []:
+        localidad = norm_nombre(fila.get("Localidad"))
+        corregida = str(fila.get("Comuna_Corregida") or "").strip()
+        if localidad and corregida:
+            mapa[localidad] = corregida
+    return mapa
+
+
+def cargar_correcciones(leer_filas):
+    global _CORRECCIONES
+    if _CORRECCIONES is None:
+        _CORRECCIONES = armar_correcciones(leer_filas())
+    return _CORRECCIONES
+
+
+def claves_comuna(comuna, correcciones=None):
+    """La comuna tal como viene de SAP y, si existe, su nombre corregido en el tarifario."""
+    claves = [norm_nombre(comuna)]
+    corregida = (correcciones or {}).get(claves[0])
+    if corregida and norm_nombre(corregida) not in claves:
+        claves.append(norm_nombre(corregida))
+    return [c for c in claves if c]
+
+
+def _item(tarifas, cubo, comuna, correcciones=None):
+    mapa = tarifas.get(cubo) or {}
+    for clave in claves_comuna(comuna, correcciones):
+        if clave in mapa:
+            return mapa[clave]
+    return None
+
+
+def region_de(tarifas, comuna, correcciones=None):
+    for cubo in tarifas:
+        item = _item(tarifas, cubo, comuna, correcciones)
         if item and str(item.get("region") or "").strip():
             return str(item["region"]).strip()
     return ""
 
 
-def cotizar_tramo(tarifas, comuna, courier, via, kg):
+def cotizar_tramo(tarifas, comuna, courier, via, kg, correcciones=None):
     kg_ok = redondear_kg(kg)
     if not (kg_ok > 0):
         return None, None
-    cubo = _bucket(courier, via)
-    item = (tarifas.get(cubo) or {}).get(norm_nombre(comuna))
+    item = _item(tarifas, _bucket(courier, via), comuna, correcciones)
     if not item:
         return kg_ok, None
     bruto = precio_generico(item["tramos"], kg_ok)

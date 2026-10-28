@@ -44,6 +44,10 @@ def region_extrema(region):
     return any(marca in clave for marca in REGIONES_EXTREMAS)
 
 
+def es_isla_de_pascua(comuna):
+    return norm_nombre(comuna) in ("ISLA DE PASCUA", "RAPA NUI", "HANGA ROA")
+
+
 def canon_courier(valor):
     n = str(valor or "").strip().lower()
     for courier in COURIERS:
