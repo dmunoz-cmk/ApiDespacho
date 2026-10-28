@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>API de costo de despacho Retail</title>
+<style>
+  @page { size: Letter; margin: 18mm 18mm 18mm 18mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10pt; color: #1d2733; line-height: 1.45; }
+  .cabecera { display: flex; justify-content: space-between; font-size: 8pt; letter-spacing: .08em; color: #5b6b7c; border-bottom: 1px solid #c9d3dd; padding-bottom: 4px; }
+  h1 { font-size: 20pt; margin: 18px 0 2px; color: #0d3b66; }
+  .sub { font-size: 8.5pt; letter-spacing: .08em; color: #5b6b7c; margin-bottom: 10px; }
+  .intro { background: #eef4fa; border-left: 4px solid #0d3b66; padding: 8px 12px; margin: 10px 0 4px; }
+  h2 { font-size: 12.5pt; color: #0d3b66; margin: 20px 0 6px; border-bottom: 1px solid #c9d3dd; padding-bottom: 3px; page-break-after: avoid; }
+  h2 span { color: #8aa0b5; font-weight: 600; margin-right: 6px; }
+  h3 { font-size: 10.5pt; margin: 12px 0 4px; color: #1d2733; page-break-after: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9d3dd; padding: 4px 7px; text-align: left; vertical-align: top; font-size: 9.2pt; }
+  th { background: #f2f5f8; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: #f2f5f8; padding: 0 3px; border-radius: 2px; }
+  pre { font-family: Consolas, "Courier New", monospace; font-size: 8.3pt; background: #f6f8fa; border: 1px solid #dde3e9; padding: 7px 9px; white-space: pre-wrap; page-break-inside: avoid; margin: 5px 0 8px; }
+  ul { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  .nota { font-size: 9pt; color: #44515e; }
+  .clave { background: #fff6e0; border-left: 4px solid #d99a00; padding: 6px 10px; margin: 8px 0; page-break-inside: avoid; }
+  .salto { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="cabecera"><span>CLINICAL MARKET / LOGÍSTICA</span><span>USO INTERNO</span></div>
+
+<h1>API de costo de despacho Retail</h1>
+<div class="sub">DOCUMENTO DE INTEGRACIÓN / OCTUBRE 2026 / CRITERIO retail-2026-10 / VERSIÓN 3</div>
+
+<div class="intro">SAP consulta esta API al momento de la orden y usa el costo que responde. La cartonización, la vía y el tarifario ya están resueltos. No hace falta reimplementarlos en SAP.</div>
+
+<h2><span>01</span>Qué calcula</h2>
+<p>El costo de despacho de una orden Retail, en pesos, según el tarifario de lista vigente. El peso que se cotiza es el volumen externo de cada caja dividido por 4.000. El peso físico del maestro no se usa.</p>
+<p>La orden se parte en facturas. Mezz (veterinaria, cosmético y nutrición) es una. Refrigerado es otra. Farma es otra. Controlado ambiente es otra. Controlado refrigerado es otra. Cada factura se cotiza sola y el costo de la orden es la suma.</p>
+
+<h2><span>02</span>Cómo llamarla</h2>
+<table>
+  <tr><th style="width:28%">Dato</th><th>Valor</th></tr>
+  <tr><td>Método</td><td>POST</td></tr>
+  <tr><td>URL</td><td><code>http://172.16.100.12:4190/cotizar</code></td></tr>
+  <tr><td>Cabecera</td><td><code>Content-Type: application/json</code></td></tr>
+  <tr><td>Red</td><td>Solo red interna. El puerto 4190 no está publicado a internet.</td></tr>
+  <tr><td>Prueba de vida</td><td><code>GET http://172.16.100.12:4190/salud</code></td></tr>
+  <tr><td>Documentación interactiva</td><td><code>http://172.16.100.12:4190/docs</code> (permite probar la llamada desde el navegador)</td></tr>
+</table>
+<p>Hoy la API no pide usuario ni token. El acceso queda limitado por la red. Para habilitar la llamada desde SAP se necesita la IP interna del servidor que la va a ejecutar, y el puerto se abre solo hacia esa dirección.</p>
+
+<h3>Tiempo de respuesta y timeout</h3>
+<ul>
+  <li>Tiempo de respuesta medido: entre 0,2 y 0,4 segundos por orden.</li>
+  <li>Timeout recomendado en SAP: 10 segundos.</li>
+  <li>Si la API no responde dentro del timeout, SAP no debe bloquear la orden de venta: la graba sin costo de despacho y la deja marcada para cotizar después.</li>
+  <li>No reintentar en bucle. Basta con un reintento, o volver a cotizar cuando se modifique la orden.</li>
+</ul>
+
+<h2><span>03</span>Entrada</h2>
+<p>Tres datos: cliente, SKU y cantidad. La comuna, la región, la ruta y el courier no se envían: salen de la ficha del cliente en SAP.</p>
+<pre>{
+  "cliente": "CM774591052",
+  "lineas": [
+    { "sku": "100736", "cantidad": 4 }
+  ]
+}</pre>
+<table>
+  <tr><th style="width:18%">Campo</th><th style="width:12%">Tipo</th><th>Significado</th></tr>
+  <tr><td><code>cliente</code></td><td>texto</td><td>CardCode del cliente.</td></tr>
+  <tr><td><code>lineas</code></td><td>lista</td><td>Al menos una línea.</td></tr>
+  <tr><td><code>sku</code></td><td>texto</td><td>ItemCode del producto.</td></tr>
+  <tr><td><code>cantidad</code></td><td>entero</td><td>Unidades de inventario de la línea (en SAP, <code>InvQty</code>, no la unidad de venta). Mayor que cero. Si el mismo SKU viene en varias líneas, la API las suma.</td></tr>
+</table>
+
+<h2><span>04</span>Reglas que aplica la API</h2>
+
+<h3>Canal</h3>
+<p>Solo clientes cuya estratificación es Retail. Un Cenabast, una clínica u otro canal se rechaza. La API no calcula esos canales.</p>
+
+<h3>Tarifario</h3>
+<p>La ruta por defecto de la dirección de despacho del cliente elige el courier.</p>
+<ul>
+  <li>COURIER-N usa el tarifario de Newtrans.</li>
+  <li>COURIER-T usa el tarifario de Transfarma.</li>
+  <li>Una ruta propia, como RUTA-C1 o RUTA-A1, no se cotiza. Esa ficha todavía no tiene courier.</li>
+</ul>
+
+<h3>Tarifario de respaldo</h3>
+<div class="clave">Si el courier del cliente no tiene tramo para la comuna y vía de una factura, la API cotiza esa factura con el tarifario del otro courier: Transfarma como respaldo de Newtrans, y Newtrans como respaldo de Transfarma. El objetivo es cobrar un costo de referencia antes que no cobrar.</div>
+<ul>
+  <li>El respaldo se decide factura por factura. En una misma orden, una factura puede usar el tarifario propio y otra el de respaldo.</li>
+  <li>Cada factura informa en <code>courier</code> el tarifario que se usó y en <code>respaldo</code> si fue el de respaldo.</li>
+  <li>Cuando se usa el respaldo, <code>avisos</code> trae una línea que lo explica.</li>
+  <li>Solo se usan Newtrans y Transfarma. Otros couriers no se consideran como respaldo.</li>
+  <li>Si ninguno de los dos tiene tramo, la factura queda sin costo (ver sección 05).</li>
+</ul>
+
+<h3>Comuna</h3>
+<p>La comuna de despacho de la ficha del cliente se busca en el tarifario tal como viene de SAP. Si no se encuentra, se busca su nombre corregido según la tabla de equivalencias <code>TRP.Matriz_Comuna_Correccion</code> (por ejemplo, TIL TIL corresponde a Tiltil y PUERTO NATALES a Natales). Para agregar una equivalencia nueva basta con una fila en esa tabla.</p>
+
+<h3>Vía</h3>
+<ul>
+  <li><b>Aérea.</b> Todo lo que va a Isla de Pascua, cualquier tipo de producto.</li>
+  <li><b>Aérea.</b> La factura es refrigerada y el destino es Arica y Parinacota, Tarapacá, Antofagasta, Aysén o Magallanes. El controlado refrigerado entra aquí.</li>
+  <li><b>Terrestre.</b> Todo lo demás: lo ambiente en cualquier región, y lo refrigerado que no va a esas cinco regiones.</li>
+</ul>
+<p>Si una orden mezcla facturas de distinta vía, el campo <code>via</code> de la respuesta queda en <code>Mixta</code>. Cada factura trae la suya.</p>
+
+<h2><span>05</span>Salida</h2>
+<div class="clave">SAP usa <code>costo</code> siempre que venga con valor, aunque sea parcial. Es preferible cobrar un costo parcial a no cobrar.</div>
+<ul>
+  <li><code>costo_completo: true</code>: todas las facturas se cotizaron, con el tarifario propio o con el de respaldo.</li>
+  <li><code>costo_completo: false</code>: alguna factura no encontró tramo ni en Newtrans ni en Transfarma. <code>costo</code> trae la suma de las que sí cotizaron y el motivo viene en <code>facturas[].motivo</code>.</li>
+  <li>Si un SKU no existe en el maestro o no tiene medidas, no se cotiza y se informa en <code>avisos</code>. El resto de la orden se cotiza igual.</li>
+  <li>Si <code>costo</code> viene nulo (ninguna factura cotizó), no se graba costo.</li>
+</ul>
+<p>Cuando <code>costo_completo</code> es <code>false</code> o <code>avisos</code> no viene vacío, el costo es parcial o de respaldo. Se sugiere dejar la orden marcada para revisión.</p>
+
+<table>
+  <tr><th style="width:26%">Campo</th><th>Significado</th></tr>
+  <tr><td><code>costo</code></td><td>Suma en pesos, sin decimales. Precio de lista neto.</td></tr>
+  <tr><td><code>costo_completo</code></td><td><code>true</code> solo si todas las facturas tuvieron precio.</td></tr>
+  <tr><td><code>via</code></td><td><code>Terrestre</code>, <code>Aerea</code> o <code>Mixta</code>.</td></tr>
+  <tr><td><code>courier</code></td><td>Newtrans o Transfarma, según la ruta del cliente.</td></tr>
+  <tr><td><code>ruta</code></td><td>COURIER-N o COURIER-T, leída del cliente.</td></tr>
+  <tr><td><code>cliente_nombre</code></td><td>Nombre del cliente según la maestra.</td></tr>
+  <tr><td><code>estratificacion</code></td><td>Canal del cliente (Retail).</td></tr>
+  <tr><td><code>comuna</code> / <code>region</code></td><td>Dirección de despacho del cliente.</td></tr>
+  <tr><td><code>criterio</code></td><td>Versión de la regla. Hoy: <code>retail-2026-10</code>.</td></tr>
+  <tr><td><code>facturas</code></td><td>Detalle por factura: courier usado, si fue respaldo, vía, bultos, kilos, costo y motivo si no cotizó.</td></tr>
+  <tr><td><code>facturas[].courier</code></td><td>Tarifario con el que se cotizó la factura.</td></tr>
+  <tr><td><code>facturas[].respaldo</code></td><td><code>true</code> si se usó el tarifario del otro courier.</td></tr>
+  <tr><td><code>avisos</code></td><td>SKU sin maestro o sin medidas, uso de tarifario de respaldo u otras observaciones. No impiden el costo si el resto cotizó.</td></tr>
+</table>
+
+<h2 class="salto"><span>06</span>Ejemplos comprobados</h2>
+<p class="nota">Las tres respuestas se obtuvieron del servicio publicado en <code>http://172.16.100.12:4190/cotizar</code>.</p>
+
+<h3>Costo completo</h3>
+<p>Cliente Retail CM774591052, comuna de despacho Vallenar, ruta COURIER-T. SKU 100736, cantidad 4.</p>
+<pre>{
+  "criterio": "retail-2026-10",
+  "cliente": "CM774591052",
+  "cliente_nombre": "OSWALDO ROBERTO ÁLAVA MANGING FARMACIA E.I.R.L.",
+  "comuna": "VALLENAR",
+  "region": "Región de Atacama",
+  "estratificacion": "RETAIL",
+  "ruta": "COURIER-T",
+  "courier": "Transfarma",
+  "via": "Terrestre",
+  "costo": 5641,
+  "costo_completo": true,
+  "facturas": [
+    {
+      "factura": "Farma",
+      "courier": "Transfarma",
+      "respaldo": false,
+      "via": "Terrestre",
+      "bultos": 1,
+      "kilos": 1.2,
+      "kilos_exactos": 1.24,
+      "costo": 5641,
+      "contenedores": [ { "nombre": "CAJA CHICA", "cantidad": 1, "kg": 1.24 } ],
+      "motivo": null
+    }
+  ],
+  "avisos": []
+}</pre>
+<p class="nota"><code>kilos</code> es el peso con el que se busca el tramo, a un decimal. <code>kilos_exactos</code> es el volumen externo sin ese redondeo. En este caso, 1,24 kg cotiza en el tramo de 1,2 kg y el precio de lista es $5.641.</p>
+
+<h3>Costo con tarifario de respaldo</h3>
+<p>Cliente Retail CM167835309, comuna de despacho Chillán Viejo, ruta COURIER-N. Newtrans no tiene tramo terrestre para Chillán Viejo, así que la factura se cotiza con Transfarma. SKU 100736, cantidad 4.</p>
+<pre>{
+  "criterio": "retail-2026-10",
+  "cliente": "CM167835309",
+  "comuna": "CHILLAN VIEJO",
+  "region": "Región de Ñuble",
+  "ruta": "COURIER-N",
+  "courier": "Newtrans",
+  "via": "Terrestre",
+  "costo": 4963,
+  "costo_completo": true,
+  "facturas": [
+    {
+      "factura": "Farma",
+      "courier": "Transfarma",
+      "respaldo": true,
+      "via": "Terrestre",
+      "bultos": 1,
+      "kilos": 1.2,
+      "kilos_exactos": 1.24,
+      "costo": 4963,
+      "contenedores": [ { "nombre": "CAJA CHICA", "cantidad": 1, "kg": 1.24 } ],
+      "motivo": null
+    }
+  ],
+  "avisos": [
+    "Farma: Newtrans no tiene tramo Terrestre para CHILLAN VIEJO. Se cotizó con el tarifario de Transfarma como respaldo."
+  ]
+}</pre>
+<p class="nota">El campo <code>courier</code> de la orden sigue mostrando la ruta del cliente (Newtrans). El tarifario efectivamente usado está en <code>facturas[].courier</code>.</p>
+
+<h3>Costo parcial</h3>
+<p>Cliente Retail CM136455311, comuna de despacho Mejillones (Región de Antofagasta), ruta COURIER-T. La orden trae un SKU ambiente (100736, cantidad 4) y uno refrigerado (100006, cantidad 2).</p>
+<pre>{
+  "criterio": "retail-2026-10",
+  "cliente": "CM136455311",
+  "comuna": "MEJILLONES",
+  "region": "Región de Antofagasta",
+  "ruta": "COURIER-T",
+  "courier": "Transfarma",
+  "via": "Mixta",
+  "costo": 6511,
+  "costo_completo": false,
+  "facturas": [
+    {
+      "factura": "Refrigerado",
+      "courier": "Transfarma",
+      "respaldo": false,
+      "via": "Aerea",
+      "bultos": 1,
+      "kilos": 6.1,
+      "kilos_exactos": 6.125,
+      "costo": null,
+      "contenedores": [ { "nombre": "NEVERA 12", "cantidad": 1, "kg": 6.125 } ],
+      "motivo": "No hay tramo para esta comuna y vía en Newtrans ni en Transfarma."
+    },
+    {
+      "factura": "Farma",
+      "courier": "Transfarma",
+      "respaldo": false,
+      "via": "Terrestre",
+      "bultos": 1,
+      "kilos": 1.2,
+      "kilos_exactos": 1.24,
+      "costo": 6511,
+      "contenedores": [ { "nombre": "CAJA CHICA", "cantidad": 1, "kg": 1.24 } ],
+      "motivo": null
+    }
+  ],
+  "avisos": []
+}</pre>
+<p class="nota">El refrigerado va a una región extrema y se cotiza por vía aérea, pero ni Transfarma ni Newtrans tienen tarifa aérea para Mejillones: esa factura queda sin costo. La factura Farma va por vía terrestre y cotiza $6.511. SAP graba los $6.511 como costo parcial y deja la orden marcada para revisión.</p>
+<p class="nota">En los ejemplos se omitieron <code>cliente_nombre</code> y <code>estratificacion</code> cuando no aportan; la API siempre los envía.</p>
+
+<h2><span>07</span>Respuestas de error</h2>
+<table>
+  <tr><th style="width:9%">HTTP</th><th style="width:44%">Cuándo</th><th>Qué hacer en SAP</th></tr>
+  <tr><td>200</td><td>La orden se cotizó, completa, parcial o con respaldo.</td><td>Usar <code>costo</code> si no es nulo. Revisar <code>costo_completo</code> y <code>avisos</code>.</td></tr>
+  <tr><td>400</td><td>Falta un dato, el cliente no existe o no es Retail, no tiene comuna, su ruta no es Courier N ni Courier T, o ningún SKU está en el maestro.</td><td>No grabar un costo. Mostrar el mensaje.</td></tr>
+  <tr><td>422</td><td>El JSON no trae cliente, líneas, SKU o una cantidad válida.</td><td>Corregir el cuerpo antes de reenviar.</td></tr>
+  <tr><td>503</td><td>La API no pudo leer SQL Server.</td><td>Reintentar más tarde. No inventar un valor.</td></tr>
+  <tr><td>Otro</td><td>Error inesperado (500), sin respuesta o timeout.</td><td>No grabar costo. Continuar con la orden y dejarla marcada para cotizar después.</td></tr>
+</table>
+<p>En los errores 400 y 503 el mensaje viene en <code>detail.mensaje</code>. Dos ejemplos:</p>
+<pre>{ "detail": { "mensaje": "El cliente es CENABAST. Esta API calcula solo Retail." } }
+
+{ "detail": { "mensaje": "La ruta por defecto del cliente es RUTA-C1. Esta API cotiza Courier N (Newtrans) y Courier T (Transfarma)." } }</pre>
+<p>En el error 422, <code>detail</code> es una lista con el campo que falló:</p>
+<pre>{ "detail": [ { "type": "missing", "loc": ["body", "lineas", 0, "cantidad"], "msg": "Field required" } ] }</pre>
+
+<h2><span>08</span>Qué no hace</h2>
+<ul>
+  <li>No graba nada en SAP. Quien llama decide dónde dejar el costo en la orden.</li>
+  <li>No calcula canales distintos de Retail.</li>
+  <li>No cotiza clientes cuya ruta no es Courier N ni Courier T.</li>
+  <li>No usa el peso físico del producto.</li>
+  <li>No elige el courier más barato. Usa el tarifario de la ruta del cliente y el del otro courier solo como respaldo cuando el propio no tiene tramo.</li>
+</ul>
+
+</body>
+</html>
