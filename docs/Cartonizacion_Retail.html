@@ -41,7 +41,7 @@
   <li>Se leen del WMS la familia, la descripción y las medidas de cada SKU.</li>
   <li>Cada línea se clasifica en un tipo de producto, y el tipo define la factura a la que pertenece.</li>
   <li>Cada línea se separa en cajas master completas y unidades sueltas.</li>
-  <li>Las unidades sueltas de un mismo grupo se suman en volumen y se empacan en el contenedor que corresponde: cartón, nevera o bandeja.</li>
+  <li>Las unidades sueltas de un mismo grupo se suman en volumen y se empacan en el contenedor que corresponde: cartón, nevera, cryopack o bandeja.</li>
   <li>El kilo de cada contenedor es su volumen externo dividido por 4.000. El peso físico no se usa.</li>
   <li>Cada factura suma los kilos de sus contenedores. Ese total, redondeado a un decimal, es el peso con el que se busca el tramo de tarifa.</li>
 </ol>
@@ -64,7 +64,7 @@
   <tr><td>REFRIGERAD</td><td>Refrigerado</td><td>Refrigerado</td><td>Nevera</td></tr>
   <tr><td>VETREFRIG</td><td>Veterinario refrigerado</td><td>Refrigerado</td><td>Nevera</td></tr>
   <tr><td>MEDI APROB, ONCOLOGICO</td><td>Farma</td><td>Farma</td><td>Cartón</td></tr>
-  <tr><td>MEDI APROB, ONCOLOGICO, para clientes con cubeta azul</td><td>Cubeta</td><td>Farma</td><td>Bandeja</td></tr>
+  <tr><td>MEDI APROB, ONCOLOGICO, para Farmacias Marga Marga</td><td>Cubeta</td><td>Farma</td><td>Bandeja</td></tr>
   <tr><td>CONTROLADO</td><td>Controlado</td><td>Controlado</td><td>Cartón</td></tr>
   <tr><td>CONTROLADO con "(REF)" en la descripción</td><td>Controlado refrigerado</td><td>Controlado refrigerado</td><td>Nevera</td></tr>
   <tr><td>Cualquier otra familia, o sin familia</td><td>Sin familia</td><td>Sin familia</td><td>Cartón</td></tr>
@@ -75,7 +75,7 @@
 <p>Dentro de una factura, las unidades sueltas se juntan por grupo antes de elegir el contenedor. Las unidades de un mismo grupo pueden compartir caja; las de grupos distintos, no.</p>
 <ul>
   <li><b>Mezz:</b> un grupo por familia. Veterinaria, cosmética y nutrición van en la misma factura, pero cada familia se empaca en sus propias cajas.</li>
-  <li><b>Resto de los tipos:</b> un grupo por tipo. Por ejemplo, todas las unidades Farma de la orden comparten cajas, y todo lo refrigerado comparte neveras.</li>
+  <li><b>Resto de los tipos:</b> un grupo por tipo. Por ejemplo, todas las unidades Farma de la orden comparten cajas, y todo lo refrigerado comparte neveras y cryopacks.</li>
 </ul>
 
 <h2><span>05</span>Cajas master y unidades sueltas</h2>
@@ -97,9 +97,10 @@
   <tr><td>BANDEJA</td><td>Cubeta azul</td><td>50 × 35 × 30</td><td class="n">70 %</td><td class="n">36,750 L</td><td>50 × 35 × 30</td><td class="n">13,125 kg</td></tr>
   <tr><td>NEVERA 12</td><td>Frío</td><td>20 × 15 × 15</td><td class="n">80 %</td><td class="n">3,600 L</td><td>35 × 25 × 28</td><td class="n">6,125 kg</td></tr>
   <tr><td>NEVERA 25</td><td>Frío</td><td>22 × 22 × 22</td><td class="n">80 %</td><td class="n">8,518 L</td><td>38 × 40 × 34</td><td class="n">12,920 kg</td></tr>
+  <tr><td>CRYOPACK</td><td>Frío</td><td>25 × 25 × 25</td><td class="n">80 %</td><td class="n">12,500 L</td><td>50 × 50 × 50</td><td class="n">31,250 kg</td></tr>
   <tr><td>Master</td><td>Caja del proveedor</td><td colspan="3">No se reempaca</td><td>Medida de la caja master</td><td class="n">cm³ ÷ 4.000</td></tr>
 </table>
-<p class="nota">En los cartones y la bandeja, la medida interior y la externa son la misma. En las neveras, la externa incluye el aislante, por eso el kilo es mucho mayor que el volumen útil.</p>
+<p class="nota">En los cartones y la bandeja, la medida interior y la externa son la misma. En las neveras y la cryopack, la externa incluye el aislante, por eso el kilo es mucho mayor que el volumen útil. La cryopack se cobra solo de ida: no se suma su retorno.</p>
 
 <h2><span>07</span>Reglas de empaque</h2>
 
@@ -114,27 +115,28 @@
 <div class="bloque">
 <h3>Frío (Refrigerado y Controlado refrigerado)</h3>
 <ol>
-  <li>Se llenan NEVERAS 25 completas, a 8,518 L útiles cada una.</li>
-  <li>El resto va en una NEVERA 12 si cabe (hasta 3,600 L); si no, en otra NEVERA 25.</li>
+  <li>El volumen del grupo va en el contenedor más chico donde quepa, en este orden: NEVERA 12 (hasta 3,600 L), NEVERA 25 (hasta 8,518 L) o CRYOPACK (hasta 12,500 L).</li>
+  <li>Si no cabe ni en una CRYOPACK, se llena una CRYOPACK completa y el resto vuelve a evaluarse desde la NEVERA 12. Se repite hasta empacar todo.</li>
 </ol>
 </div>
 
 <div class="bloque">
 <h3>Cubeta azul (bandeja)</h3>
-<p>Para los clientes con cubeta azul, los productos Farma (MEDI APROB y ONCOLOGICO) van en BANDEJAS en vez de cartón. Se usan tantas bandejas como hagan falta para el volumen, a 36,750 L útiles cada una, redondeando hacia arriba. Hoy la regla aplica a dos RUT:</p>
-<ul>
-  <li>76.700.582-2, Farmacias Marga Marga Ltda. (Retail).</li>
-  <li>96.770.100-9, Clínica Alemana de Santiago S.A. Su canal es Clínicas y Hospitales, así que la API de despacho Retail no la cotiza.</li>
-</ul>
+<p>Solo para Farmacias Marga Marga Ltda. (RUT 76.700.582-2), los productos Farma (MEDI APROB y ONCOLOGICO) van en BANDEJAS en vez de cartón. Cada bandeja se evalúa por separado:</p>
+<ol>
+  <li>Se llenan BANDEJAS completas, a 36,750 L útiles cada una.</li>
+  <li>Si queda un resto, se mide contra el volumen total de la bandeja (52,5 L). Si es al menos el 50 % (26,25 L), va en otra BANDEJA.</li>
+  <li>Si es menos del 50 %, ese resto se cartoniza solo, con la regla de ambiente: va a la caja más chica donde quepa.</li>
+</ol>
 </div>
 
-<div class="clave">El empaque se calcula por volumen total, no por acomodo físico: se asume que las unidades llenan la caja hasta el factor indicado (70 % en cartón y bandeja, 80 % en nevera), sin revisar si cada unidad cabe por forma o tamaño.</div>
+<div class="clave">El empaque se calcula por volumen total, no por acomodo físico: se asume que las unidades llenan la caja hasta el factor indicado (70 % en cartón y bandeja, 80 % en nevera y cryopack), sin revisar si cada unidad cabe por forma o tamaño.</div>
 
 <h2><span>08</span>Kilo volumétrico y redondeo</h2>
 <div class="formula">kilo del contenedor = volumen externo (cm³) ÷ 4.000<br>kilo de la factura = suma de los kilos de sus contenedores (3 decimales)<br>kilo para el tramo = kilo de la factura redondeado a 1 decimal (0,05 sube)</div>
 <ul>
   <li>El peso físico del maestro no se usa en ningún paso.</li>
-  <li>Los bultos de la factura son la cantidad total de contenedores: masters, cajas, neveras y bandejas.</li>
+  <li>Los bultos de la factura son la cantidad total de contenedores: masters, cajas, neveras, cryopacks y bandejas.</li>
   <li>En la respuesta de la API, <code>kilos_exactos</code> es el kilo de la factura y <code>kilos</code> es el kilo para el tramo.</li>
 </ul>
 
@@ -154,10 +156,12 @@
   <tr><td>SKU 100736 (Farma), 4 unidades</td><td>1 CAJA CHICA</td><td class="n">1</td><td class="n">1,240</td><td class="n">1,2</td></tr>
   <tr><td>SKU 100006 (Refrigerado), 2 unidades</td><td>1 NEVERA 12</td><td class="n">1</td><td class="n">6,125</td><td class="n">6,1</td></tr>
   <tr><td>Farma, 40 L sueltos</td><td>1 CAJA (30,976 L) + resto de 9,024 L en 1 CAJA MEDIA</td><td class="n">2</td><td class="n">17,017</td><td class="n">17,0</td></tr>
-  <tr><td>Refrigerado, 10 L sueltos</td><td>1 NEVERA 25 (8,518 L) + resto de 1,482 L en 1 NEVERA 12</td><td class="n">2</td><td class="n">19,045</td><td class="n">19,0</td></tr>
+  <tr><td>Refrigerado, 10 L sueltos</td><td>1 CRYOPACK (no cabe en NEVERA 25)</td><td class="n">1</td><td class="n">31,250</td><td class="n">31,3</td></tr>
+  <tr><td>Refrigerado, 20 L sueltos</td><td>1 CRYOPACK (12,500 L) + resto de 7,500 L en 1 NEVERA 25</td><td class="n">2</td><td class="n">44,170</td><td class="n">44,2</td></tr>
   <tr><td>Nutrición, 25 unidades de 1 L, master de 10 unidades (8.000 cm³)</td><td>2 Master (2,000 kg c/u) + 5 L sueltos en 1 CAJA MEDIA</td><td class="n">3</td><td class="n">9,954</td><td class="n">10,0</td></tr>
   <tr><td>Mezz: 1 veterinario y 1 cosmético, 1 L cada uno</td><td>2 CAJA CHICA, una por familia</td><td class="n">2</td><td class="n">2,480</td><td class="n">2,5</td></tr>
-  <tr><td>Farma para cubeta azul, 40 L</td><td>2 BANDEJA</td><td class="n">2</td><td class="n">26,250</td><td class="n">26,3</td></tr>
+  <tr><td>Farma Marga Marga, 40 L</td><td>1 BANDEJA (36,750 L) + resto de 3,250 L, bajo el 50 %, en 1 CAJA CHICA</td><td class="n">2</td><td class="n">14,365</td><td class="n">14,4</td></tr>
+  <tr><td>Farma Marga Marga, 20 L</td><td>Bajo el 50 % de una bandeja: 1 CAJA</td><td class="n">1</td><td class="n">11,063</td><td class="n">11,1</td></tr>
 </table>
 
 <h2><span>11</span>Qué no considera</h2>
@@ -166,7 +170,7 @@
   <li>El acomodo físico de las unidades: solo el volumen total contra la capacidad útil.</li>
   <li>Mezclar productos de facturas distintas en una caja, ni de familias Mezz distintas.</li>
   <li>Abrir cajas master para completar cartones.</li>
-  <li>Material de relleno, refrigerantes o embalaje adicional, fuera de lo que ya incluyen el factor de llenado y la medida externa de las neveras.</li>
+  <li>Material de relleno, refrigerantes o embalaje adicional, fuera de lo que ya incluyen el factor de llenado y la medida externa de las neveras y la cryopack.</li>
 </ul>
 
 </body>

@@ -3,7 +3,7 @@ import math
 import unicodedata
 
 COURIERS = ("Newtrans", "Transfarma", "Cargoex", "Chibra")
-RUTS_CUBETA = ("767005822", "967701009")
+RUTS_CUBETA = ("767005822",)
 REGIONES_EXTREMAS = ("arica", "tarapaca", "antofagasta", "aysen", "aisen", "magallanes")
 
 

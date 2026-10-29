@@ -16,13 +16,17 @@ CAP_M3 = {
 CAP_FRIO_M3 = {
     "NEVERA 12": ((20 * 15 * 15) / 1e6) * 0.80,
     "NEVERA 25": ((22 * 22 * 22) / 1e6) * 0.80,
+    "CRYOPACK": ((25 * 25 * 25) / 1e6) * 0.80,
 }
+CASCADA_FRIO = ("NEVERA 12", "NEVERA 25", "CRYOPACK")
+BANDEJA_MIN_LLENADO = 0.50
 KG_EXTERNO = {
     "CAJA CHICA": (20 * 16 * 15.5) / DIVISOR,
     "CAJA MEDIA": (31.5 * 24 * 31.5) / DIVISOR,
     "CAJA": (52 * 37 * 23) / DIVISOR,
     "NEVERA 12": (35 * 25 * 28) / DIVISOR,
     "NEVERA 25": (38 * 40 * 34) / DIVISOR,
+    "CRYOPACK": (50 * 50 * 50) / DIVISOR,
     "BANDEJA": (50 * 35 * 30) / DIVISOR,
 }
 
@@ -100,23 +104,36 @@ def empacar_ambiente(vol):
 
 
 def empacar_frio(vol):
-    cap25 = CAP_FRIO_M3["NEVERA 25"]
-    cap_chica = CAP_FRIO_M3["NEVERA 12"]
-    n25 = math.floor(vol / cap25 + 1e-12)
-    resto = vol - n25 * cap25
+    """El contenedor más chico donde quepa; si no cabe ni en la cryopack, se llena una y el resto repite."""
+    cap_cryo = CAP_FRIO_M3["CRYOPACK"]
+    n_cryo = 0
+    resto = vol
+    while resto > cap_cryo + 1e-12:
+        n_cryo += 1
+        resto -= cap_cryo
     out = []
-    if n25 > 0:
-        out.append(_caja("NEVERA 25", n25, KG_EXTERNO["NEVERA 25"]))
+    if n_cryo > 0:
+        out.append(_caja("CRYOPACK", n_cryo, KG_EXTERNO["CRYOPACK"]))
     if resto > 1e-9:
-        nombre = "NEVERA 12" if resto <= cap_chica + 1e-12 else "NEVERA 25"
+        nombre = next(n for n in CASCADA_FRIO if resto <= CAP_FRIO_M3[n] + 1e-12)
         out.append(_caja(nombre, 1, KG_EXTERNO[nombre]))
     return out
 
 
 def empacar_cubeta(vol):
+    """Bandejas llenas a su capacidad útil; la última, si queda bajo el 50 % del volumen total, va a cartón."""
     cap = CAP_M3["BANDEJA"] * UTIL_CARTON
-    n = math.ceil(vol / cap - 1e-12)
-    return [_caja("BANDEJA", n, KG_EXTERNO["BANDEJA"])] if n > 0 else []
+    llenas = math.floor(vol / cap + 1e-12)
+    resto = vol - llenas * cap
+    out = []
+    if resto > 1e-9 and resto >= CAP_M3["BANDEJA"] * BANDEJA_MIN_LLENADO - 1e-12:
+        llenas += 1
+        resto = 0
+    if llenas > 0:
+        out.append(_caja("BANDEJA", llenas, KG_EXTERNO["BANDEJA"]))
+    if resto > 1e-9:
+        out.extend(empacar_ambiente(resto))
+    return out
 
 
 def empacar_suelto(tipo, vol):

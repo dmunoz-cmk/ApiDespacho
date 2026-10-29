@@ -59,10 +59,33 @@ class CartonTest(unittest.TestCase):
 
     def test_cubeta_azul(self):
         r = simular_lineas([
-            linea(sku="F", prtfam="ONCOLOGICO", rut="76.700.582-2"),
+            linea(sku="F", prtfam="ONCOLOGICO", rut="76.700.582-2", qty=30),
         ])
         self.assertEqual(r["facturas"][0]["id"], "FARMA")
         self.assertEqual(r["facturas"][0]["contenedores"][0]["nombre"], "BANDEJA")
+
+    def contenedores(self, **partial):
+        r = simular_lineas([linea(sku="X", **partial)])
+        return [(c["cantidad"], c["nombre"]) for c in r["facturas"][0]["contenedores"]]
+
+    def test_cubeta_bajo_la_mitad_va_a_carton(self):
+        marga = "76.700.582-2"
+        self.assertEqual(self.contenedores(prtfam="MEDI APROB", rut=marga, qty=10), [(1, "CAJA MEDIA")])
+        self.assertEqual(self.contenedores(prtfam="MEDI APROB", rut=marga, qty=40), [(1, "BANDEJA"), (1, "CAJA CHICA")])
+        self.assertEqual(self.contenedores(prtfam="MEDI APROB", rut=marga, qty=60), [(1, "BANDEJA"), (1, "CAJA")])
+        self.assertEqual(self.contenedores(prtfam="MEDI APROB", rut=marga, qty=65), [(2, "BANDEJA")])
+
+    def test_alemana_no_usa_cubeta(self):
+        self.assertEqual(self.contenedores(prtfam="MEDI APROB", rut="96.770.100-9", qty=30), [(1, "CAJA")])
+
+    def test_cascada_frio(self):
+        self.assertEqual(self.contenedores(prtfam="REFRIGERAD", qty=3), [(1, "NEVERA 12")])
+        self.assertEqual(self.contenedores(prtfam="REFRIGERAD", qty=5), [(1, "NEVERA 25")])
+        self.assertEqual(self.contenedores(prtfam="REFRIGERAD", qty=10), [(1, "CRYOPACK")])
+        self.assertEqual(self.contenedores(prtfam="REFRIGERAD", qty=20), [(1, "CRYOPACK"), (1, "NEVERA 25")])
+        self.assertEqual(self.contenedores(prtfam="REFRIGERAD", qty=27), [(2, "CRYOPACK"), (1, "NEVERA 12")])
+        r = simular_lineas([linea(sku="X", prtfam="REFRIGERAD", qty=10)])
+        self.assertEqual(r["facturas"][0]["kg_exacto"], 31.25)
 
 
 class ViaTest(unittest.TestCase):
