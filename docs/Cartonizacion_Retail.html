@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cartonización de órdenes Retail</title>
+<style>
+  @page { size: Letter; margin: 18mm 18mm 18mm 18mm; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10pt; color: #1d2733; line-height: 1.45; }
+  .cabecera { display: flex; justify-content: space-between; font-size: 8pt; letter-spacing: .08em; color: #5b6b7c; border-bottom: 1px solid #c9d3dd; padding-bottom: 4px; }
+  h1 { font-size: 20pt; margin: 18px 0 2px; color: #0d3b66; }
+  .sub { font-size: 8.5pt; letter-spacing: .08em; color: #5b6b7c; margin-bottom: 10px; }
+  .intro { background: #eef4fa; border-left: 4px solid #0d3b66; padding: 8px 12px; margin: 10px 0 4px; }
+  h2 { font-size: 12.5pt; color: #0d3b66; margin: 20px 0 6px; border-bottom: 1px solid #c9d3dd; padding-bottom: 3px; page-break-after: avoid; }
+  h2 span { color: #8aa0b5; font-weight: 600; margin-right: 6px; }
+  h3 { font-size: 10.5pt; margin: 12px 0 4px; color: #1d2733; page-break-after: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9d3dd; padding: 4px 7px; text-align: left; vertical-align: top; font-size: 9.2pt; }
+  th { background: #f2f5f8; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; background: #f2f5f8; padding: 0 3px; border-radius: 2px; }
+  ul, ol { margin: 4px 0 6px; padding-left: 20px; }
+  li { margin: 2px 0; }
+  .nota { font-size: 9pt; color: #44515e; }
+  .clave { background: #fff6e0; border-left: 4px solid #d99a00; padding: 6px 10px; margin: 8px 0; page-break-inside: avoid; }
+  .formula { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; background: #f6f8fa; border: 1px solid #dde3e9; padding: 6px 10px; margin: 6px 0; }
+  .salto { page-break-before: always; }
+  .bloque { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cabecera"><span>CLINICAL MARKET / LOGÍSTICA</span><span>USO INTERNO</span></div>
+
+<h1>Cartonización de órdenes Retail</h1>
+<div class="sub">DEFINICIONES Y REGLAS APLICADAS / OCTUBRE 2026 / CRITERIO retail-2026-10</div>
+
+<div class="intro">Este documento describe cómo la API de costo de despacho convierte las líneas de una orden (SKU y cantidad) en facturas, bultos y kilos. Es la lógica que está aplicada hoy en el servicio publicado. El costo en pesos se obtiene después, buscando esos kilos en el tarifario del courier (ver el documento de integración de la API).</div>
+
+<h2><span>01</span>Resumen del proceso</h2>
+<ol>
+  <li>Se leen del WMS la familia, la descripción y las medidas de cada SKU.</li>
+  <li>Cada línea se clasifica en un tipo de producto, y el tipo define la factura a la que pertenece.</li>
+  <li>Cada línea se separa en cajas master completas y unidades sueltas.</li>
+  <li>Las unidades sueltas de un mismo grupo se suman en volumen y se empacan en el contenedor que corresponde: cartón, nevera o bandeja.</li>
+  <li>El kilo de cada contenedor es su volumen externo dividido por 4.000. El peso físico no se usa.</li>
+  <li>Cada factura suma los kilos de sus contenedores. Ese total, redondeado a un decimal, es el peso con el que se busca el tramo de tarifa.</li>
+</ol>
+
+<h2><span>02</span>Datos que usa</h2>
+<table>
+  <tr><th style="width:28%">Dato</th><th>Origen y regla</th></tr>
+  <tr><td>Familia y descripción del SKU</td><td>Maestro de productos de Blue Yonder (<code>v_maestro_productos</code>), cliente CLINICAL MARKET, plantilla <code>----</code>. Si un SKU aparece con más de una familia y una es refrigerada, se usa la refrigerada.</td></tr>
+  <tr><td>Medida de la unidad</td><td>Footprint de la unidad (<code>v_footprint</code>, unidad <code>UN</code>): largo × ancho × alto en centímetros.</td></tr>
+  <tr><td>Caja master</td><td>Footprint de la caja (<code>v_footprint</code>, unidad <code>CJ</code>) del mismo código de footprint que la unidad: medidas de la caja y unidades por caja.</td></tr>
+  <tr><td>RUT del cliente</td><td>Ficha del cliente en la maestra de SAP. Solo se usa para la regla de cubeta azul (sección 07).</td></tr>
+</table>
+<div class="clave"><b>Medida usable de una unidad.</b> El volumen de la unidad se acepta solo si largo, ancho y alto son mayores que cero y el volumen queda entre 0 y 4.500 cm³ (4,5 litros). Una unidad sin medida o con un volumen mayor se considera "sin medida usable" (sección 09).</div>
+
+<h2><span>03</span>Clasificación y facturas</h2>
+<p>La familia del maestro define el tipo de producto, y el tipo define la factura. Cada factura se empaca y se cotiza por separado: los productos de facturas distintas nunca comparten caja.</p>
+<table>
+  <tr><th style="width:30%">Familia en el maestro</th><th style="width:22%">Tipo</th><th style="width:22%">Factura</th><th>Contenedor</th></tr>
+  <tr><td>VETERINARI, COSMETICO, NUTRICIONA</td><td>Mezz</td><td>Mezz</td><td>Cartón</td></tr>
+  <tr><td>REFRIGERAD</td><td>Refrigerado</td><td>Refrigerado</td><td>Nevera</td></tr>
+  <tr><td>VETREFRIG</td><td>Veterinario refrigerado</td><td>Refrigerado</td><td>Nevera</td></tr>
+  <tr><td>MEDI APROB, ONCOLOGICO</td><td>Farma</td><td>Farma</td><td>Cartón</td></tr>
+  <tr><td>MEDI APROB, ONCOLOGICO, para clientes con cubeta azul</td><td>Cubeta</td><td>Farma</td><td>Bandeja</td></tr>
+  <tr><td>CONTROLADO</td><td>Controlado</td><td>Controlado</td><td>Cartón</td></tr>
+  <tr><td>CONTROLADO con "(REF)" en la descripción</td><td>Controlado refrigerado</td><td>Controlado refrigerado</td><td>Nevera</td></tr>
+  <tr><td>Cualquier otra familia, o sin familia</td><td>Sin familia</td><td>Sin familia</td><td>Cartón</td></tr>
+</table>
+<p class="nota">Las facturas Refrigerado y Controlado refrigerado son las que pueden ir por vía aérea a regiones extremas. Las demás van por vía terrestre, salvo Isla de Pascua, que siempre es aérea.</p>
+
+<h2><span>04</span>Grupos de empaque</h2>
+<p>Dentro de una factura, las unidades sueltas se juntan por grupo antes de elegir el contenedor. Las unidades de un mismo grupo pueden compartir caja; las de grupos distintos, no.</p>
+<ul>
+  <li><b>Mezz:</b> un grupo por familia. Veterinaria, cosmética y nutrición van en la misma factura, pero cada familia se empaca en sus propias cajas.</li>
+  <li><b>Resto de los tipos:</b> un grupo por tipo. Por ejemplo, todas las unidades Farma de la orden comparten cajas, y todo lo refrigerado comparte neveras.</li>
+</ul>
+
+<h2><span>05</span>Cajas master y unidades sueltas</h2>
+<p>Si el SKU tiene caja master con más de una unidad por caja, la cantidad de la línea se separa así:</p>
+<div class="formula">masters = parte entera (cantidad ÷ unidades por caja)<br>sueltas = cantidad − masters × unidades por caja</div>
+<ul>
+  <li>Cada caja master viaja como un bulto propio, sin reempacar. Su kilo es el volumen de la caja master (cm³) ÷ 4.000.</li>
+  <li>Las unidades sueltas suman su volumen al grupo y se empacan según la sección 07.</li>
+  <li>Si el SKU no tiene caja master, o tiene una unidad por caja, toda la cantidad se trata como sueltas.</li>
+</ul>
+
+<h2 class="salto"><span>06</span>Contenedores</h2>
+<p>Cada contenedor tiene una capacidad útil, que es el volumen de producto que se acepta dentro, y un kilo volumétrico, calculado con su medida externa.</p>
+<table>
+  <tr><th>Contenedor</th><th>Uso</th><th>Medida interior (cm)</th><th class="n">Factor de llenado</th><th class="n">Capacidad útil</th><th>Medida externa (cm)</th><th class="n">Kilo volumétrico</th></tr>
+  <tr><td>CAJA CHICA</td><td>Ambiente</td><td>20 × 16 × 15,5</td><td class="n">70 %</td><td class="n">3,472 L</td><td>20 × 16 × 15,5</td><td class="n">1,240 kg</td></tr>
+  <tr><td>CAJA MEDIA</td><td>Ambiente</td><td>31,5 × 24 × 31,5</td><td class="n">70 %</td><td class="n">16,670 L</td><td>31,5 × 24 × 31,5</td><td class="n">5,954 kg</td></tr>
+  <tr><td>CAJA</td><td>Ambiente</td><td>52 × 37 × 23</td><td class="n">70 %</td><td class="n">30,976 L</td><td>52 × 37 × 23</td><td class="n">11,063 kg</td></tr>
+  <tr><td>BANDEJA</td><td>Cubeta azul</td><td>50 × 35 × 30</td><td class="n">70 %</td><td class="n">36,750 L</td><td>50 × 35 × 30</td><td class="n">13,125 kg</td></tr>
+  <tr><td>NEVERA 12</td><td>Frío</td><td>20 × 15 × 15</td><td class="n">80 %</td><td class="n">3,600 L</td><td>35 × 25 × 28</td><td class="n">6,125 kg</td></tr>
+  <tr><td>NEVERA 25</td><td>Frío</td><td>22 × 22 × 22</td><td class="n">80 %</td><td class="n">8,518 L</td><td>38 × 40 × 34</td><td class="n">12,920 kg</td></tr>
+  <tr><td>Master</td><td>Caja del proveedor</td><td colspan="3">No se reempaca</td><td>Medida de la caja master</td><td class="n">cm³ ÷ 4.000</td></tr>
+</table>
+<p class="nota">En los cartones y la bandeja, la medida interior y la externa son la misma. En las neveras, la externa incluye el aislante, por eso el kilo es mucho mayor que el volumen útil.</p>
+
+<h2><span>07</span>Reglas de empaque</h2>
+
+<div class="bloque">
+<h3>Ambiente (Mezz, Farma, Controlado y Sin familia)</h3>
+<ol>
+  <li>Se llenan CAJAS grandes completas: tantas como quepan enteras en el volumen del grupo, a 30,976 L útiles cada una.</li>
+  <li>El resto va en una sola caja: la más chica en la que quepa, en este orden: CAJA CHICA (hasta 3,472 L), CAJA MEDIA (hasta 16,670 L) o CAJA.</li>
+</ol>
+</div>
+
+<div class="bloque">
+<h3>Frío (Refrigerado y Controlado refrigerado)</h3>
+<ol>
+  <li>Se llenan NEVERAS 25 completas, a 8,518 L útiles cada una.</li>
+  <li>El resto va en una NEVERA 12 si cabe (hasta 3,600 L); si no, en otra NEVERA 25.</li>
+</ol>
+</div>
+
+<div class="bloque">
+<h3>Cubeta azul (bandeja)</h3>
+<p>Para los clientes con cubeta azul, los productos Farma (MEDI APROB y ONCOLOGICO) van en BANDEJAS en vez de cartón. Se usan tantas bandejas como hagan falta para el volumen, a 36,750 L útiles cada una, redondeando hacia arriba. Hoy la regla aplica a dos RUT:</p>
+<ul>
+  <li>76.700.582-2, Farmacias Marga Marga Ltda. (Retail).</li>
+  <li>96.770.100-9, Clínica Alemana de Santiago S.A. Su canal es Clínicas y Hospitales, así que la API de despacho Retail no la cotiza.</li>
+</ul>
+</div>
+
+<div class="clave">El empaque se calcula por volumen total, no por acomodo físico: se asume que las unidades llenan la caja hasta el factor indicado (70 % en cartón y bandeja, 80 % en nevera), sin revisar si cada unidad cabe por forma o tamaño.</div>
+
+<h2><span>08</span>Kilo volumétrico y redondeo</h2>
+<div class="formula">kilo del contenedor = volumen externo (cm³) ÷ 4.000<br>kilo de la factura = suma de los kilos de sus contenedores (3 decimales)<br>kilo para el tramo = kilo de la factura redondeado a 1 decimal (0,05 sube)</div>
+<ul>
+  <li>El peso físico del maestro no se usa en ningún paso.</li>
+  <li>Los bultos de la factura son la cantidad total de contenedores: masters, cajas, neveras y bandejas.</li>
+  <li>En la respuesta de la API, <code>kilos_exactos</code> es el kilo de la factura y <code>kilos</code> es el kilo para el tramo.</li>
+</ul>
+
+<h2><span>09</span>Productos sin medida</h2>
+<table>
+  <tr><th style="width:32%">Caso</th><th>Qué hace la API</th></tr>
+  <tr><td>SKU que no está en el maestro</td><td>La línea no se cotiza y se informa en <code>avisos</code>. El resto de la orden sigue.</td></tr>
+  <tr><td>Unidades sueltas sin medida usable</td><td>No suman volumen y se informan en <code>avisos</code>. Si el grupo no tiene ningún otro contenedor, se cuenta un bulto "Sin medida" sin kilo.</td></tr>
+  <tr><td>Cajas master sin medida</td><td>Se cuentan como bultos, pero no suman kilo. Se informan en <code>avisos</code>.</td></tr>
+  <tr><td>Factura sin ningún kilo</td><td>No se puede buscar tramo: la factura queda sin costo con el motivo "Sin kilo volumétrico para buscar el tramo".</td></tr>
+</table>
+
+<h2 class="salto"><span>10</span>Ejemplos</h2>
+<p class="nota">Los dos primeros son SKU reales cotizados en el servicio publicado. Los demás son casos de cálculo con volúmenes de referencia, obtenidos con la misma lógica.</p>
+<table>
+  <tr><th style="width:30%">Caso</th><th>Contenedores</th><th class="n">Bultos</th><th class="n">Kilos exactos</th><th class="n">Kilo para el tramo</th></tr>
+  <tr><td>SKU 100736 (Farma), 4 unidades</td><td>1 CAJA CHICA</td><td class="n">1</td><td class="n">1,240</td><td class="n">1,2</td></tr>
+  <tr><td>SKU 100006 (Refrigerado), 2 unidades</td><td>1 NEVERA 12</td><td class="n">1</td><td class="n">6,125</td><td class="n">6,1</td></tr>
+  <tr><td>Farma, 40 L sueltos</td><td>1 CAJA (30,976 L) + resto de 9,024 L en 1 CAJA MEDIA</td><td class="n">2</td><td class="n">17,017</td><td class="n">17,0</td></tr>
+  <tr><td>Refrigerado, 10 L sueltos</td><td>1 NEVERA 25 (8,518 L) + resto de 1,482 L en 1 NEVERA 12</td><td class="n">2</td><td class="n">19,045</td><td class="n">19,0</td></tr>
+  <tr><td>Nutrición, 25 unidades de 1 L, master de 10 unidades (8.000 cm³)</td><td>2 Master (2,000 kg c/u) + 5 L sueltos en 1 CAJA MEDIA</td><td class="n">3</td><td class="n">9,954</td><td class="n">10,0</td></tr>
+  <tr><td>Mezz: 1 veterinario y 1 cosmético, 1 L cada uno</td><td>2 CAJA CHICA, una por familia</td><td class="n">2</td><td class="n">2,480</td><td class="n">2,5</td></tr>
+  <tr><td>Farma para cubeta azul, 40 L</td><td>2 BANDEJA</td><td class="n">2</td><td class="n">26,250</td><td class="n">26,3</td></tr>
+</table>
+
+<h2><span>11</span>Qué no considera</h2>
+<ul>
+  <li>El peso físico de los productos ni un peso máximo por caja.</li>
+  <li>El acomodo físico de las unidades: solo el volumen total contra la capacidad útil.</li>
+  <li>Mezclar productos de facturas distintas en una caja, ni de familias Mezz distintas.</li>
+  <li>Abrir cajas master para completar cartones.</li>
+  <li>Material de relleno, refrigerantes o embalaje adicional, fuera de lo que ya incluyen el factor de llenado y la medida externa de las neveras.</li>
+</ul>
+
+</body>
+</html>
