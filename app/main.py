@@ -1,11 +1,21 @@
 """API local de costo de despacho. Escucha solo en este PC."""
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.cotizar import PedidoInvalido, cotizar
 from app.datos import ErrorDatos
 
-app = FastAPI(title="API Despacho", version="0.1.0")
+def _version():
+    archivo = Path(__file__).resolve().parents[1] / "VERSION"
+    if archivo.exists():
+        return archivo.read_text(encoding="utf-8").strip() or "0.0.0"
+    return "0.0.0"
+
+
+VERSION = _version()
+app = FastAPI(title="API Despacho", version=VERSION)
 
 
 class LineaIn(BaseModel):
@@ -20,7 +30,7 @@ class CotizarIn(BaseModel):
 
 @app.get("/salud")
 def salud():
-    return {"estado": "ok", "servicio": "api-despacho"}
+    return {"estado": "ok", "servicio": "api-despacho", "version": VERSION}
 
 
 @app.post("/cotizar")
