@@ -66,6 +66,7 @@ def _filas(conexion, sql, params=()):
 
 
 def leer_matriz():
+    """Legacy. La cotización viva lee tarifarios + coberturas."""
     with conectar_ccl() as con:
         return _filas(
             con,
@@ -75,6 +76,66 @@ def leer_matriz():
             FROM [TRP].[matriz_costos]
             """,
         )
+
+
+def leer_stack_tarifarios(fecha):
+    """Tarifario vigente por courier/vía, sus celdas, reglas y coberturas."""
+    with conectar_ccl() as con:
+        coberturas = _filas(
+            con,
+            """
+            SELECT [Courier], [Destino], [Hub], [Comuna], [Zona], [Es_Hub]
+              FROM [TRP].[coberturas]
+             WHERE [Courier] IN (N'Newtrans', N'Transfarma')
+            """,
+        )
+        out = {"fecha": fecha, "coberturas": coberturas, "tarifarios": {}}
+        for courier, via in (
+            ("Newtrans", "Terrestre"),
+            ("Newtrans", "Aerea"),
+            ("Transfarma", "Terrestre"),
+            ("Transfarma", "Aerea"),
+        ):
+            vigente = _filas(
+                con,
+                """
+                SELECT TOP 1 [Id]
+                  FROM [TRP].[tarifarios]
+                 WHERE [Courier] = ?
+                   AND [Via] = ?
+                   AND [Vigente_desde] <= CAST(? AS DATE)
+                   AND ([Vigente_hasta] IS NULL OR [Vigente_hasta] >= CAST(? AS DATE))
+                 ORDER BY [Vigente_desde] DESC, [Id] DESC
+                """,
+                (courier, via, fecha, fecha),
+            )
+            if not vigente:
+                continue
+            tid = vigente[0]["Id"]
+            precios = _filas(
+                con,
+                """
+                SELECT [Hub], [Zona], [Kg_desde], [Kg_hasta], [Tipo_precio], [Precio]
+                  FROM [TRP].[tarifario_precio]
+                 WHERE [TarifarioId] = ?
+                """,
+                (tid,),
+            )
+            reglas = _filas(
+                con,
+                """
+                SELECT [Clave], [Valor]
+                  FROM [TRP].[tarifario_regla]
+                 WHERE [TarifarioId] = ?
+                """,
+                (tid,),
+            )
+            out["tarifarios"][(courier, via)] = {
+                "id": tid,
+                "precios": precios,
+                "reglas": reglas,
+            }
+        return out
 
 
 def leer_correcciones():

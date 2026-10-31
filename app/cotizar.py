@@ -1,10 +1,10 @@
 """Arma el costo de despacho de una orden para SAP."""
 from app.carton import REFRIGERADAS, simular_lineas, sku_key
-from app.datos import ErrorDatos, leer_cliente, leer_correcciones, leer_matriz, leer_productos
+from app.datos import ErrorDatos, leer_cliente, leer_correcciones, leer_productos
 from app.nombres import courier_nt, es_isla_de_pascua, es_retail, norm_nombre, region_extrema
-from app.tarifas import cargar_correcciones, cargar_tarifas, cotizar_tramo, region_de
+from app.tarifas import aplicar_reglas, cargar_correcciones, cargar_tarifas, cotizar_tramo, region_de
 
-CRITERIO = "retail-2026-10"
+CRITERIO = "retail-2026-10-v4"
 RESPALDO = {"Newtrans": "Transfarma", "Transfarma": "Newtrans"}
 
 
@@ -128,7 +128,7 @@ def cotizar(pedido):
     armado = simular_lineas(resueltas)
     avisos.extend(armado["avisos"])
     try:
-        tarifas = cargar_tarifas(leer_matriz)
+        tarifas = cargar_tarifas()
         correcciones = cargar_correcciones(leer_correcciones)
     except ErrorDatos:
         raise
@@ -140,25 +140,31 @@ def cotizar(pedido):
     completas = 0
     for fac in armado["facturas"]:
         via = via_de_factura(fac["id"], region, comuna)
-        kg, precio = (None, None)
+        kg, flete = (None, None)
         usado, respaldo = courier, False
         motivo = None
+        reglas = None
         if not comuna or not courier:
             motivo = "Falta la comuna o el courier de la ruta del cliente para buscar el tramo."
         elif not (fac["kg_exacto"] > 0):
             motivo = "Sin kilo volumétrico para buscar el tramo."
         else:
-            kg, precio, usado, respaldo = cotizar_factura(
+            kg, flete, usado, respaldo = cotizar_factura(
                 tarifas, correcciones, comuna, courier, via, fac["kg_exacto"]
             )
-            if precio is None:
+            if flete is None:
                 motivo = "No hay tramo para esta comuna y vía en Newtrans ni en Transfarma."
             elif respaldo:
                 avisos.append(
                     f"{fac['nombre']}: {courier} no tiene tramo {via} para {comuna}. "
                     f"Se cotizó con el tarifario de {usado} como respaldo."
                 )
-        if precio is not None:
+        precio = None
+        if flete is not None:
+            reglas = aplicar_reglas(
+                tarifas, correcciones, fac, comuna, usado, via, kg, flete
+            )
+            precio = reglas["costo"]
             total += precio
             completas += 1
         facturas.append({
@@ -169,6 +175,11 @@ def cotizar(pedido):
             "bultos": fac["bultos"],
             "kilos": kg,
             "kilos_exactos": fac["kg_exacto"],
+            "flete": None if reglas is None else reglas["flete"],
+            "combustible": None if reglas is None else reglas["combustible"],
+            "cedible": None if reglas is None else reglas["cedible"],
+            "extras_ida": None if reglas is None else reglas["extras_ida"],
+            "cryo_retorno": None if reglas is None else reglas["cryo_retorno"],
             "costo": precio,
             "contenedores": fac["contenedores"],
             "motivo": motivo,
