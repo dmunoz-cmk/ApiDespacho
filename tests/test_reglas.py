@@ -1,6 +1,6 @@
 import unittest
 
-from app.tarifas import aplicar_reglas, armar_tarifas, armar_tarifas_trp, cotizar_tramo
+from app.tarifas import aplicar_reglas, armar_tarifas, armar_tarifas_trp, cotizar_tramo, kilos_cryo
 
 
 def fac(fid="FARMA", bultos=1, kg=1.2, contenedores=None):
@@ -76,10 +76,15 @@ class ReglasTest(unittest.TestCase):
         self.assertEqual(r["cryo_retorno"], 0)
         self.assertEqual(r["cedible"], 590)
 
-    def test_nt_controlado_refrigerado_suma_ambos_de_ida(self):
+    def test_nt_controlado_refrigerado_un_solo_recargo_por_bulto(self):
         kg, flete = cotizar_tramo(self.t, "ANTOFAGASTA", "Newtrans", "Terrestre", 6.1)
         r = aplicar_reglas(self.t, {}, fac("CREF", bultos=2), "ANTOFAGASTA", "Newtrans", "Terrestre", kg, flete)
-        self.assertEqual(r["extras_ida"], 11270 * 4)
+        self.assertEqual(r["extras_ida"], 11270 * 2)
+
+    def test_nt_controlado_por_bulto(self):
+        kg, flete = cotizar_tramo(self.t, "ANTOFAGASTA", "Newtrans", "Terrestre", 1.2)
+        r = aplicar_reglas(self.t, {}, fac("CONTROLADO", bultos=3), "ANTOFAGASTA", "Newtrans", "Terrestre", kg, flete)
+        self.assertEqual(r["extras_ida"], 11270 * 3)
 
     def test_tf_controlado_usa_cedible_1500(self):
         kg, flete = cotizar_tramo(self.t, "SANTIAGO", "Transfarma", "Terrestre", 1.2)
@@ -96,6 +101,10 @@ class ReglasTest(unittest.TestCase):
         self.assertEqual(r["cryo_retorno"], 2100)
         self.assertEqual(r["extras_ida"], 0)
         self.assertEqual(r["costo"], 3000 + 500 + 2100)
+
+    def test_tf_cryo_suma_kilos_de_todas_las_unidades(self):
+        dos = fac("REF", bultos=2, contenedores=[{"nombre": "NEVERA 12", "cantidad": 2, "kg": 0.9}])
+        self.assertEqual(kilos_cryo(dos), 1.8)
 
     def test_prueba_matriz_sigue_cotizando_flete(self):
         t = armar_tarifas([{

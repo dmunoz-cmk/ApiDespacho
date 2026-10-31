@@ -358,7 +358,7 @@ def kilos_cryo(factura):
         kg = c.get("kg")
         cant = _num(c.get("cantidad"), 1)
         if kg is not None:
-            total += float(kg)
+            total += float(kg) * cant
         else:
             total += cant
     return total if hay and total > 0 else None
@@ -379,10 +379,10 @@ def aplicar_reglas(tarifas, correcciones, factura, comuna, courier, via, kg, fle
         cedible = js_round(r["cedible"])
     extras_ida = 0
     if courier == "Newtrans":
-        if es_ctrl:
-            extras_ida += js_round(r["controlado"] * bultos)
         if es_ref:
             extras_ida += js_round(r["refrigerado"] * bultos)
+        elif es_ctrl:
+            extras_ida += js_round(r["controlado"] * bultos)
     cryo = 0
     if es_ref:
         if courier == "Newtrans":
